@@ -1,3 +1,4 @@
+#include <string.h>
 #include <Keyboard.h>
 #include <Mouse.h>
 
@@ -43,6 +44,33 @@ struct roll
 	int val[FILTERING];
 };
 
+
+void rollroll( struct roll roller)
+{
+	memmove( &roller.val, &roller.val + sizeof(int), FILTERING - 1);
+}
+
+int roll_avg( struct roll roller)
+{
+	int avg = 0;
+	// pretty sure this can be done in a much more clever way, without using a for
+	for (int i=0; i<FILTERING; ++i)
+	{
+		avg += roller.val[i];
+	}
+	avg /= FILTERING;
+}
+
+struct
+{
+	struct roll Au;
+	struct roll Av;
+	struct roll Bu;
+	struct roll Bv;
+	struct roll Cu;
+	struct roll Cv;
+}raw_rolling;
+
 struct uv
 { // we will work with 2d vectors a lot
 	int u;
@@ -80,12 +108,30 @@ struct active_channel prev;
 
 void updateInput()
 { // read input values from analog ports
-	input.A.v = normA(analogRead(Pinout::STICK0_U));
-	input.A.u = normA(analogRead(Pinout::STICK0_V));
-	input.B.v = normA(analogRead(Pinout::STICK1_U));
-	input.B.u = normA(analogRead(Pinout::STICK1_V));
-	input.C.v = normA(analogRead(Pinout::STICK2_U));
-	input.C.u = normA(analogRead(Pinout::STICK2_V));
+	rollroll(raw_rolling.Au);
+	raw_rolling.Au.val[0] = normA(analogRead(Pinout::STICK0_V));
+	
+	rollroll(raw_rolling.Av);
+	raw_rolling.Av.val[0] = normA(analogRead(Pinout::STICK0_U));
+	
+	rollroll(raw_rolling.Bu);
+	raw_rolling.Bv.val[0] = normA(analogRead(Pinout::STICK0_V));
+	
+	rollroll(raw_rolling.Bv);
+	raw_rolling.Bu.val[0] = normA(analogRead(Pinout::STICK0_U));
+	
+	rollroll(raw_rolling.Cu);
+	raw_rolling.Cu.val[0] = normA(analogRead(Pinout::STICK0_V));
+	
+	rollroll(raw_rolling.Cv);
+	raw_rolling.Cv.val[0] = normA(analogRead(Pinout::STICK0_U));
+	
+	input.A.v = roll_avg(raw_rolling.Au);
+	input.A.u = roll_avg(raw_rolling.Av);
+	input.B.v = roll_avg(raw_rolling.Bu);
+	input.B.u = roll_avg(raw_rolling.Bv);
+	input.C.v = roll_avg(raw_rolling.Cu);
+	input.C.u = roll_avg(raw_rolling.Cv);
 }
 
 
