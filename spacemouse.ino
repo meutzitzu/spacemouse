@@ -17,12 +17,13 @@
 	   <60> mm
 */
 
-#define sin60 (866/1000)
-#define sin30 (1/2)
+#define sin60 1000/866
+#define sin30 2/1
 
-#define THRESHOLD 32
+#define THRESHOLD 16
 #define FILTERING 4
-#define DELAY 10
+#define DELAY 16
+#define SPEED 1/16
 
 enum Pinout:byte
 { // current pin configuration
@@ -59,6 +60,7 @@ int roll_avg( struct roll roller)
 		avg += roller.val[i];
 	}
 	avg /= FILTERING;
+	return avg;
 }
 
 struct
@@ -109,22 +111,22 @@ struct active_channel prev;
 void updateInput()
 { // read input values from analog ports
 	rollroll(raw_rolling.Au);
-	raw_rolling.Au.val[0] = normA(analogRead(Pinout::STICK0_V));
-	
-	rollroll(raw_rolling.Av);
-	raw_rolling.Av.val[0] = normA(analogRead(Pinout::STICK0_U));
-	
-	rollroll(raw_rolling.Bu);
-	raw_rolling.Bv.val[0] = normA(analogRead(Pinout::STICK0_V));
-	
-	rollroll(raw_rolling.Bv);
-	raw_rolling.Bu.val[0] = normA(analogRead(Pinout::STICK0_U));
-	
-	rollroll(raw_rolling.Cu);
-	raw_rolling.Cu.val[0] = normA(analogRead(Pinout::STICK0_V));
-	
-	rollroll(raw_rolling.Cv);
-	raw_rolling.Cv.val[0] = normA(analogRead(Pinout::STICK0_U));
+	raw_rolling.Au.val[0] =  normA(analogRead(Pinout::STICK0_U));
+	                                                            
+	rollroll(raw_rolling.Av);                                   
+	raw_rolling.Av.val[0] =  normA(analogRead(Pinout::STICK0_V));
+	                                                            
+	rollroll(raw_rolling.Bu);                                   
+	raw_rolling.Bv.val[0] =  normA(analogRead(Pinout::STICK1_V));
+	                                                            
+	rollroll(raw_rolling.Bv);                                   
+	raw_rolling.Bu.val[0] =  normA(analogRead(Pinout::STICK1_U));
+	                                                            
+	rollroll(raw_rolling.Cu);                                   
+	raw_rolling.Cu.val[0] =  normA(analogRead(Pinout::STICK2_U));
+	                                                            
+	rollroll(raw_rolling.Cv);                                   
+	raw_rolling.Cv.val[0] =  normA(analogRead(Pinout::STICK2_V));
 	
 	input.A.v = roll_avg(raw_rolling.Au);
 	input.A.u = roll_avg(raw_rolling.Av);
@@ -133,7 +135,40 @@ void updateInput()
 	input.C.v = roll_avg(raw_rolling.Cu);
 	input.C.u = roll_avg(raw_rolling.Cv);
 }
+	
+void printInputs()
+{
+	Serial.print("INPUT:\t ");
+	Serial.print("\tAu=\t ");
+	Serial.print(input.A.u);
+	Serial.print("\tAv=\t ");
+	Serial.print(input.A.v);
+	Serial.print("\tBu=\t ");
+	Serial.print(input.B.u);
+	Serial.print("\tBv=\t ");
+	Serial.print(input.B.v);
+	Serial.print("\tCu=\t ");
+	Serial.print(input.C.u);
+	Serial.print("\tCv=\t ");
+	Serial.print(input.C.v);
+	Serial.print("\r\n");
+}
 
+void printMotions()
+{
+	Serial.print("INPUT:   ");
+	Serial.print("\tZoom=\t ");
+	Serial.print(motion.zoom);
+	Serial.print("\tPanX=\t ");
+	Serial.print(motion.pan.u);
+	Serial.print("\tPanY=\t ");
+	Serial.print(motion.pan.v);
+	Serial.print("\tOrbitX=\t ");
+	Serial.print(motion.orbit.u);
+	Serial.print("\tOrbitY=\t ");
+	Serial.print(motion.orbit.v);
+	Serial.print("\r\n");
+}
 
 /*
  * THIS IS WHERE THE MAGIC HAPPENS
@@ -149,18 +184,18 @@ void getMotion()
 	motion.roll = (input.A.u + input.B.u + input.C.u)/3;
 	motion.pan = 
 	{
-		-input.A.u + sin30*(input.B.u + input.C.u), 
-		sin60*(-input.B.u + input.C.u)
+		-input.A.u + (input.B.u + input.C.u)*sin30, 
+		(-input.B.u + input.C.u)*sin60
 	};
 	motion.orbit=
 	{
-		-sin60*(input.B.u - input.C.u), 
-		-input.A.v + sin30*(input.B.v + input.C.v)
+		-(input.B.v - input.C.v)*sin60, 
+		-input.A.v + (input.B.v + input.C.v)*sin30
 	};
 	curr.zoom = (abs(motion.zoom) > THRESHOLD);
-	curr.roll = (abs(motion.zoom) > THRESHOLD);
-	curr.pan = (abs(motion.zoom) > THRESHOLD);
-	curr.orbit = (abs(motion.zoom) > THRESHOLD);
+	curr.roll = (abs(motion.roll) > THRESHOLD);
+	curr.pan = (abs(motion.pan.u)+abs(motion.pan.v) > 2*THRESHOLD);
+	curr.orbit = (abs(motion.orbit.u)+abs(motion.orbit.v) > 2*THRESHOLD);
 }
 
 /* These could probably be done more succinctly with some macro black magic
@@ -168,138 +203,70 @@ void getMotion()
  */
 
 
-void blender_apply_zoom( int zoom)
+void apply_zoom( int zoom)
 {
 	if(curr.zoom)
 	{
-		if(!prev.zoom)
-		{ // rising edge
-			Keyboard.press(KEY_LEFT_CTRL);
-			delay(DELAY);
-			Mouse.press(MOUSE_MIDDLE);
-			delay(DELAY);
-		}
-		else
-		{ // continous high
-			Mouse.move(0, zoom);
-		}
+		Keyboard.press(KEY_LEFT_CTRL);
+		Keyboard.press(KEY_LEFT_SHIFT);
+		delay(DELAY);
+		Mouse.press(MOUSE_MIDDLE);
+		Mouse.move(0, zoom*SPEED);
+		delay(DELAY);
+		Keyboard.release(KEY_LEFT_CTRL);
+		Keyboard.release(KEY_LEFT_SHIFT);
+		delay(DELAY);
+		Mouse.release(MOUSE_MIDDLE);
+		Mouse.move(0, -zoom*SPEED);
+		delay(DELAY);
 	}
-	else
-	{
-		if(prev.zoom)
-		{ // falling edge
-			Keyboard.release(KEY_LEFT_CTRL);
-			delay(DELAY);
-			Mouse.release(MOUSE_MIDDLE);
-			delay(DELAY);
-		}
-		else
-		{ // continous high
-			Mouse.move(0, zoom);
-		}
-	}
-	prev.zoom = curr.zoom;
 }
 
-void blender_apply_roll( int roll)
+void apply_roll( int roll)
 {
-	if(curr.roll)
-	{
-		if(!prev.roll)
-		{ // rising edge
-			/* you may have noticed these are empty :))
-			this is because blender uses turntable rotation (Z always vertical).
-			rolling would just make things more confusing
-			*/
-		}
-		else
-		{ // continous high
-			
-		}
-	}
-	else
-	{
-		if(prev.roll)
-		{ // falling edge
-			
-		}
-		else
-		{ // continous high
-			
-		}
-	}
-	prev.roll = curr.roll;
+	
 }
 
-void blender_apply_orbit( struct uv orbit)
+void apply_orbit( struct uv orbit)
 {
 	if(curr.orbit)
 	{
-		if(!prev.orbit)
-		{ // rising edge
-			Mouse.press(MOUSE_MIDDLE);
-			delay(DELAY);
-		}
-		else
-		{ // continous high
-			Mouse.move(orbit.u, orbit.v);
-		}
+		Mouse.press(MOUSE_MIDDLE);
+		delay(DELAY);
+		Mouse.move( orbit.u*SPEED, orbit.v*SPEED);
+		delay(DELAY);
+		Mouse.release(MOUSE_MIDDLE);
+		delay(DELAY);
+		Mouse.move(-orbit.u*SPEED, -orbit.v*SPEED);
+		delay(DELAY);
 	}
-	else
-	{
-		if(prev.orbit)
-		{ // falling edge
-			Mouse.release(MOUSE_MIDDLE);
-			delay(DELAY);
-		}
-		else
-		{ // continous high
-			Mouse.move(orbit.u, orbit.v);
-		}
-	}
-	prev.orbit = curr.orbit;
 }
 
-void blender_apply_pan( struct uv pan)
+void apply_pan( struct uv pan)
 {
 	if(curr.pan)
 	{
-		if(!prev.pan)
-		{ // rising edge
-			Mouse.press(MOUSE_MIDDLE);
-			delay(DELAY);
-		}
-		else
-		{ // continous high
-			Mouse.move(pan.u, pan.v);
-		}
+		Keyboard.press(KEY_LEFT_SHIFT);
+		delay(DELAY);
+		Mouse.press(MOUSE_MIDDLE);
+		delay(DELAY);
+		Mouse.move(-pan.u*SPEED, pan.v*SPEED);
+		delay(DELAY);
+		Keyboard.release(KEY_LEFT_SHIFT);
+		delay(DELAY);
+		Mouse.release(MOUSE_MIDDLE);
+		delay(DELAY);
+		Mouse.move( pan.u*SPEED, -pan.v*SPEED);
+		delay(DELAY);
 	}
-	else
-	{
-		if(prev.pan)
-		{ // falling edge
-			Mouse.release(MOUSE_MIDDLE);
-			delay(DELAY);
-		}
-		else
-		{ // continous high
-			Mouse.move(pan.u, pan.v);
-		}
-	}
-	prev.pan = curr.pan;
 }
 
-void blender_apply_motion()
+void apply_motion()
 {
-	blender_apply_zoom(motion.zoom);
-	blender_apply_roll(motion.roll);
-	blender_apply_pan(motion.pan);
-	blender_apply_orbit(motion.orbit);
-}
-
-void applyMotion()
-{ // sends the required key&mouse inputs to apply desired motion
-	
+	apply_zoom(motion.zoom);
+	apply_roll(motion.roll);
+	apply_pan(motion.pan);
+	apply_orbit(motion.orbit);
 }
 
 void setup()
@@ -313,8 +280,7 @@ void loop()
 {
 	updateInput();
 	getMotion();
-	blender_apply_zoom(motion.zoom);
-	//Serial.println(input.A.u);
-
-	delay(10);
+	//printInputs();
+	//printMotions();
+	apply_motion();
 }
