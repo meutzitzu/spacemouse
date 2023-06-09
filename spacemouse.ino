@@ -135,7 +135,7 @@ void updateInput()
 	input.C.v = roll_avg(raw_rolling.Cu);
 	input.C.u = roll_avg(raw_rolling.Cv);
 }
-	
+ 
 void printInputs()
 {
 	Serial.print("INPUT:\t ");
@@ -178,6 +178,7 @@ void printMotions()
  * the movement on all channels of the 3D transform
  * from each stick's local UV space
  */
+
 void getMotion()
 { // calculates the motions from the states of the joysticks
 	motion.zoom = (input.A.v + input.B.v + input.C.v)/3;
