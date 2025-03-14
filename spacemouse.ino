@@ -1,7 +1,5 @@
 #include <string.h>
-#include "extrakeys.h"
-#include <Keyboard.h>
-#include <Mouse.h>
+//#include <BleKeyboard.h>
 
 /*
 	the spacemouse is comprised of 3 joysticks arranged in a triangular orientation
@@ -22,34 +20,35 @@
 #define sin30 2/1
 
 #define THRESHOLD 16
-#define FILTERING 4
+#define FILTERING 8
 #define DELAY 8
 #define SPEED 1/16
 
 enum Pinout:byte
 { // current pin configuration
-	STICK0_U = A0,
-	STICK0_V = A1,
-	STICK1_U = A2,
-	STICK1_V = A3,
-	STICK2_U = A4,
-	STICK2_V = A5,
+	STICK0_U = 13,
+	STICK0_V = 12,
+	STICK1_U = 14,
+	STICK1_V = 27,
+	STICK2_U = 26,
+	STICK2_V = 25,
 };
 
 int normA( int raw)
 { // centers the potentiometer values around 0
-	return raw-512;
+	return raw;
 }
 
 struct roll
 {
+	int index;
 	int val[FILTERING];
 };
 
 
-void rollroll( struct roll roller)
+void rollroll(struct roll *roller)
 {
-	memmove( &roller.val, &roller.val + sizeof(int), FILTERING - 1);
+	roller->index=(roller->index+1)%FILTERING;
 }
 
 int roll_avg( struct roll roller)
@@ -111,30 +110,41 @@ struct active_channel prev;
 
 void updateInput()
 { // read input values from analog ports
-	rollroll(raw_rolling.Au);
-	raw_rolling.Au.val[0] =  normA(analogRead(Pinout::STICK0_U));
+	rollroll(&raw_rolling.Au);
+	raw_rolling.Au.val[raw_rolling.Au.index] =  normA(analogRead(Pinout::STICK0_U));
 	                                                            
-	rollroll(raw_rolling.Av);                                   
-	raw_rolling.Av.val[0] =  normA(analogRead(Pinout::STICK0_V));
+	rollroll(&raw_rolling.Av);                                   
+	raw_rolling.Av.val[raw_rolling.Av.index] =  normA(analogRead(Pinout::STICK0_V));
+/*	
 	                                                            
 	rollroll(raw_rolling.Bu);                                   
-	raw_rolling.Bv.val[0] =  normA(analogRead(Pinout::STICK1_V));
+//	raw_rolling.Bv.val[0] =  normA(analogRead(Pinout::STICK1_V));
 	                                                            
 	rollroll(raw_rolling.Bv);                                   
-	raw_rolling.Bu.val[0] =  normA(analogRead(Pinout::STICK1_U));
+//	raw_rolling.Bu.val[0] =  normA(analogRead(Pinout::STICK1_U));
 	                                                            
 	rollroll(raw_rolling.Cu);                                   
-	raw_rolling.Cu.val[0] =  normA(analogRead(Pinout::STICK2_U));
+//	raw_rolling.Cu.val[0] =  normA(analogRead(Pinout::STICK2_U));
 	                                                            
 	rollroll(raw_rolling.Cv);                                   
-	raw_rolling.Cv.val[0] =  normA(analogRead(Pinout::STICK2_V));
-	
-	input.A.v = roll_avg(raw_rolling.Au);
-	input.A.u = roll_avg(raw_rolling.Av);
-	input.B.v = roll_avg(raw_rolling.Bu);
-	input.B.u = roll_avg(raw_rolling.Bv);
-	input.C.v = roll_avg(raw_rolling.Cu);
-	input.C.u = roll_avg(raw_rolling.Cv);
+//	raw_rolling.Cv.val[0] =  normA(analogRead(Pinout::STICK2_V));
+ */
+	input.A.u = roll_avg(raw_rolling.Au);
+	input.A.v = roll_avg(raw_rolling.Av);
+/*	
+	input.B.u = roll_avg(raw_rolling.Bu);
+	input.B.v = roll_avg(raw_rolling.Bv);
+	input.C.u = roll_avg(raw_rolling.Cu);
+	input.C.v = roll_avg(raw_rolling.Cv);
+ */
+}
+
+void plotInputs()
+{
+	Serial.print(input.A.u);
+	Serial.print("\t");
+	Serial.print(input.A.v);
+	Serial.print("\r\n");
 }
  
 void printInputs()
@@ -209,10 +219,12 @@ void apply_zoom( int zoom)
 {
 	if(curr.zoom)
 	{
+/*
 		Keyboard.press(KEY_LEFT_SHIFT);
 		Keyboard.press(zoom>0 ? KEY_KEYPAD_PLUS : KEY_KEYPAD_MINUS);
 		Keyboard.release(zoom>0 ? KEY_KEYPAD_PLUS : KEY_KEYPAD_MINUS);
 		Keyboard.release(KEY_LEFT_SHIFT);
+ */
 	}
 }
 
@@ -220,10 +232,12 @@ void apply_roll( int roll)
 {
 	if(curr.roll)
 	{
+/*
 		Keyboard.press(KEY_LEFT_SHIFT);
 		Keyboard.press(roll>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
 		Keyboard.release(roll>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
 		Keyboard.release(KEY_LEFT_SHIFT);
+ */
 	}
 }
 
@@ -231,10 +245,12 @@ void apply_orbit( struct uv orbit)
 {
 	if(curr.orbit)
 	{
+/*
 		Keyboard.press(orbit.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
 		Keyboard.release(orbit.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
 		Keyboard.press(orbit.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
 		Keyboard.release(orbit.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
+ */
 	}
 }
 
@@ -242,12 +258,14 @@ void apply_pan( struct uv pan)
 {
 	if(curr.pan)
 	{
+/*
 		Keyboard.press(KEY_LEFT_CTRL);
 		Keyboard.press(pan.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
 		Keyboard.release(pan.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
 		Keyboard.press(pan.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
 		Keyboard.release(pan.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
 		Keyboard.release(KEY_LEFT_CTRL);
+ */
 	}
 }
 
@@ -261,17 +279,21 @@ void apply_motion()
 
 void setup()
 {
+	pinMode(13,INPUT);
+	pinMode(12,INPUT);
 	Serial.begin(9600);
-	Keyboard.begin();
-	Mouse.begin();
+//	Keyboard.begin();
+//	Mouse.begin();
 }
 
 void loop()
 {
 	updateInput();
+	plotInputs();
+/*
 	getMotion();
-	//printInputs();
-	//printMotions();
+	printMotions();
 	apply_motion();
+ */
 	delay(DELAY);
 }
