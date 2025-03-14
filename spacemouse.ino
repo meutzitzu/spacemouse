@@ -1,4 +1,5 @@
 #include <string.h>
+#include "extrakeys.h"
 #include <Keyboard.h>
 #include <Mouse.h>
 
@@ -22,7 +23,7 @@
 
 #define THRESHOLD 16
 #define FILTERING 4
-#define DELAY 16
+#define DELAY 8
 #define SPEED 1/16
 
 enum Pinout:byte
@@ -208,38 +209,32 @@ void apply_zoom( int zoom)
 {
 	if(curr.zoom)
 	{
-		Keyboard.press(KEY_LEFT_CTRL);
 		Keyboard.press(KEY_LEFT_SHIFT);
-		delay(DELAY);
-		Mouse.press(MOUSE_MIDDLE);
-		Mouse.move(0, zoom*SPEED);
-		delay(DELAY);
-		Keyboard.release(KEY_LEFT_CTRL);
+		Keyboard.press(zoom>0 ? KEY_KEYPAD_PLUS : KEY_KEYPAD_MINUS);
+		Keyboard.release(zoom>0 ? KEY_KEYPAD_PLUS : KEY_KEYPAD_MINUS);
 		Keyboard.release(KEY_LEFT_SHIFT);
-		delay(DELAY);
-		Mouse.release(MOUSE_MIDDLE);
-		Mouse.move(0, -zoom*SPEED);
-		delay(DELAY);
 	}
 }
 
 void apply_roll( int roll)
 {
-	
+	if(curr.roll)
+	{
+		Keyboard.press(KEY_LEFT_SHIFT);
+		Keyboard.press(roll>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
+		Keyboard.release(roll>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
+		Keyboard.release(KEY_LEFT_SHIFT);
+	}
 }
 
 void apply_orbit( struct uv orbit)
 {
 	if(curr.orbit)
 	{
-		Mouse.press(MOUSE_MIDDLE);
-		delay(DELAY);
-		Mouse.move( orbit.u*SPEED, orbit.v*SPEED);
-		delay(DELAY);
-		Mouse.release(MOUSE_MIDDLE);
-		delay(DELAY);
-		Mouse.move(-orbit.u*SPEED, -orbit.v*SPEED);
-		delay(DELAY);
+		Keyboard.press(orbit.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
+		Keyboard.release(orbit.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
+		Keyboard.press(orbit.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
+		Keyboard.release(orbit.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
 	}
 }
 
@@ -247,24 +242,18 @@ void apply_pan( struct uv pan)
 {
 	if(curr.pan)
 	{
-		Keyboard.press(KEY_LEFT_SHIFT);
-		delay(DELAY);
-		Mouse.press(MOUSE_MIDDLE);
-		delay(DELAY);
-		Mouse.move(-pan.u*SPEED, pan.v*SPEED);
-		delay(DELAY);
-		Keyboard.release(KEY_LEFT_SHIFT);
-		delay(DELAY);
-		Mouse.release(MOUSE_MIDDLE);
-		delay(DELAY);
-		Mouse.move( pan.u*SPEED, -pan.v*SPEED);
-		delay(DELAY);
+		Keyboard.press(KEY_LEFT_CTRL);
+		Keyboard.press(pan.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
+		Keyboard.release(pan.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
+		Keyboard.press(pan.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
+		Keyboard.release(pan.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
+		Keyboard.release(KEY_LEFT_CTRL);
 	}
 }
 
 void apply_motion()
 {
-	apply_zoom(motion.zoom);
+	//apply_zoom(motion.zoom);
 	apply_roll(motion.roll);
 	apply_pan(motion.pan);
 	apply_orbit(motion.orbit);
@@ -284,4 +273,5 @@ void loop()
 	//printInputs();
 	//printMotions();
 	apply_motion();
+	delay(DELAY);
 }
