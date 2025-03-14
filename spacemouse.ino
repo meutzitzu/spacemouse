@@ -19,6 +19,7 @@
 #define sin60 1000/866
 #define sin30 2/1
 
+#define ANALOG_MAX 4096
 #define THRESHOLD 16
 #define FILTERING 8
 #define DELAY 8
@@ -34,17 +35,23 @@ enum Pinout:byte
 	STICK2_V = 25,
 };
 
-int normA( int raw)
-{ // centers the potentiometer values around 0
-	return raw;
-}
 
-struct roll
+struct roll //raw channel input rotating buffer
 {
-	int index;
-	int val[FILTERING];
+	int index; //used for rotating buffer indexing
+	int offset;//used for calibrating around 0
+	int val[FILTERING];//actual buffer
 };
 
+int normalize(struct roll roller)
+{ // centers the potentiometer values around 0
+	return roll_avg(roller)-roller.offset;
+}
+
+void roll_zero(struct roll *roller)
+{
+	roller->offset=roll_avg(*roller);
+}
 
 void rollroll(struct roll *roller)
 {
@@ -111,32 +118,26 @@ struct active_channel prev;
 void updateInput()
 { // read input values from analog ports
 	rollroll(&raw_rolling.Au);
-	raw_rolling.Au.val[raw_rolling.Au.index] =  normA(analogRead(Pinout::STICK0_U));
-	                                                            
+	raw_rolling.Au.val[raw_rolling.Au.index] =  analogRead(Pinout::STICK0_U);
 	rollroll(&raw_rolling.Av);                                   
-	raw_rolling.Av.val[raw_rolling.Av.index] =  normA(analogRead(Pinout::STICK0_V));
-/*	
-	                                                            
-	rollroll(raw_rolling.Bu);                                   
-//	raw_rolling.Bv.val[0] =  normA(analogRead(Pinout::STICK1_V));
-	                                                            
-	rollroll(raw_rolling.Bv);                                   
-//	raw_rolling.Bu.val[0] =  normA(analogRead(Pinout::STICK1_U));
-	                                                            
-	rollroll(raw_rolling.Cu);                                   
-//	raw_rolling.Cu.val[0] =  normA(analogRead(Pinout::STICK2_U));
-	                                                            
-	rollroll(raw_rolling.Cv);                                   
-//	raw_rolling.Cv.val[0] =  normA(analogRead(Pinout::STICK2_V));
- */
-	input.A.u = roll_avg(raw_rolling.Au);
-	input.A.v = roll_avg(raw_rolling.Av);
-/*	
-	input.B.u = roll_avg(raw_rolling.Bu);
-	input.B.v = roll_avg(raw_rolling.Bv);
-	input.C.u = roll_avg(raw_rolling.Cu);
-	input.C.v = roll_avg(raw_rolling.Cv);
- */
+	raw_rolling.Av.val[raw_rolling.Av.index] =  analogRead(Pinout::STICK0_V);
+	
+	rollroll(&raw_rolling.Bu);
+	raw_rolling.Bu.val[raw_rolling.Bu.index] =  analogRead(Pinout::STICK1_U);
+	rollroll(&raw_rolling.Bv);                                   
+	raw_rolling.Bv.val[raw_rolling.Bv.index] =  analogRead(Pinout::STICK1_V);
+	
+	rollroll(&raw_rolling.Cu);
+	raw_rolling.Cu.val[raw_rolling.Cu.index] =  analogRead(Pinout::STICK2_U);
+	rollroll(&raw_rolling.Cv);                                   
+	raw_rolling.Cv.val[raw_rolling.Cv.index] =  analogRead(Pinout::STICK2_V);
+
+	input.A.u = normalize(raw_rolling.Au);
+	input.A.v = normalize(raw_rolling.Av);
+	input.B.u = normalize(raw_rolling.Bu);
+	input.B.v = normalize(raw_rolling.Bv);
+	input.C.u = normalize(raw_rolling.Cu);
+	input.C.v = normalize(raw_rolling.Cv);
 }
 
 void plotInputs()
@@ -281,7 +282,18 @@ void setup()
 {
 	pinMode(13,INPUT);
 	pinMode(12,INPUT);
+	
 	Serial.begin(9600);
+	for (int i=0;i<FILTERING;i++)
+	{
+		updateInput();
+	}
+	roll_zero(&raw_rolling.Au);
+	roll_zero(&raw_rolling.Av);
+	roll_zero(&raw_rolling.Bu);
+	roll_zero(&raw_rolling.Bv);
+	roll_zero(&raw_rolling.Cu);
+	roll_zero(&raw_rolling.Cv);
 //	Keyboard.begin();
 //	Mouse.begin();
 }
