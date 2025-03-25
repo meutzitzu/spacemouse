@@ -1,5 +1,5 @@
 #include <string.h>
-//#include <BleKeyboard.h>
+#include <BleCombo.h>
 
 /*
 	the spacemouse is comprised of 3 joysticks arranged in a triangular orientation
@@ -19,20 +19,28 @@
 #define sin60 1000/866
 #define sin30 2/1
 
-#define ANALOG_MAX 4096
-#define THRESHOLD 16
-#define FILTERING 8
-#define DELAY 8
+#define ANALOG_MAX 4096 // measuring range of ADCs
+#define THRESHOLD 1024 // "deadzone" size. any input below this will be ignored
+#define FILTERING 1  // number of rolling average slots. higher values reduce noise at the cost of input lag
+#define DELAY 100 // use this to control the main loop speed
 #define SPEED 1/16
+
+BleCombo bleCombo("Space Mouse", "un jmeker", 42);
+
+bool button;
+bool prev_button;
+bool button_event;
+bool enabled;
 
 enum Pinout:byte
 { // current pin configuration
-	STICK0_U = 13,
-	STICK0_V = 12,
-	STICK1_U = 14,
-	STICK1_V = 27,
-	STICK2_U = 26,
-	STICK2_V = 25,
+	STICK0_U = 12,
+	STICK0_V = 13,
+	STICK1_U = 27,
+	STICK1_V = 14,
+	STICK2_U = 25,
+	STICK2_V = 26,
+	BUTTON = 18,
 };
 
 
@@ -53,10 +61,13 @@ void roll_zero(struct roll *roller)
 	roller->offset=roll_avg(*roller);
 }
 
-void rollroll(struct roll *roller)
+
+void roll_update(struct roll *roller, int newval)
 {
-	roller->index=(roller->index+1)%FILTERING;
+	roller->val[roller->index]=newval;
+	roller->index=(roller->index + 1)%FILTERING;
 }
+
 
 int roll_avg( struct roll roller)
 {
@@ -78,7 +89,17 @@ struct
 	struct roll Bv;
 	struct roll Cu;
 	struct roll Cv;
-}raw_rolling;
+} raw_rolling;
+
+void zero_all()
+{
+	roll_zero(&raw_rolling.Au);
+	roll_zero(&raw_rolling.Av);
+	roll_zero(&raw_rolling.Bu);
+	roll_zero(&raw_rolling.Bv);
+	roll_zero(&raw_rolling.Cu);
+	roll_zero(&raw_rolling.Cv);
+}
 
 struct uv
 { // we will work with 2d vectors a lot
@@ -117,21 +138,23 @@ struct active_channel prev;
 
 void updateInput()
 { // read input values from analog ports
-	rollroll(&raw_rolling.Au);
-	raw_rolling.Au.val[raw_rolling.Au.index] =  analogRead(Pinout::STICK0_U);
-	rollroll(&raw_rolling.Av);                                   
-	raw_rolling.Av.val[raw_rolling.Av.index] =  analogRead(Pinout::STICK0_V);
+	button = !digitalRead(Pinout::BUTTON);
+	button_event = (button && !prev_button ? true : false);
+	enabled = (button_event ? !enabled : enabled);
+	Serial.print((enabled ? "ON" : "OFF"));
+	Serial.print("\t");
+	Serial.print((button_event ? "ON" : "OFF"));
+	Serial.print("\t");
+	Serial.println((button ? "ON" : "OFF"));
+	prev_button = button;
 	
-	rollroll(&raw_rolling.Bu);
-	raw_rolling.Bu.val[raw_rolling.Bu.index] =  analogRead(Pinout::STICK1_U);
-	rollroll(&raw_rolling.Bv);                                   
-	raw_rolling.Bv.val[raw_rolling.Bv.index] =  analogRead(Pinout::STICK1_V);
+	roll_update(&raw_rolling.Au, analogRead(Pinout::STICK0_U));
+	roll_update(&raw_rolling.Av, analogRead(Pinout::STICK0_V));
+	roll_update(&raw_rolling.Bu, analogRead(Pinout::STICK1_U));
+	roll_update(&raw_rolling.Bv, analogRead(Pinout::STICK1_V));
+	roll_update(&raw_rolling.Cu, analogRead(Pinout::STICK2_U));
+	roll_update(&raw_rolling.Cv, analogRead(Pinout::STICK2_V));
 	
-	rollroll(&raw_rolling.Cu);
-	raw_rolling.Cu.val[raw_rolling.Cu.index] =  analogRead(Pinout::STICK2_U);
-	rollroll(&raw_rolling.Cv);                                   
-	raw_rolling.Cv.val[raw_rolling.Cv.index] =  analogRead(Pinout::STICK2_V);
-
 	input.A.u = normalize(raw_rolling.Au);
 	input.A.v = normalize(raw_rolling.Av);
 	input.B.u = normalize(raw_rolling.Bu);
@@ -145,6 +168,14 @@ void plotInputs()
 	Serial.print(input.A.u);
 	Serial.print("\t");
 	Serial.print(input.A.v);
+	Serial.print("\t");
+	Serial.print(input.B.u);
+	Serial.print("\t");
+	Serial.print(input.B.v);
+	Serial.print("\t");
+	Serial.print(input.C.u);
+	Serial.print("\t");
+	Serial.print(input.C.v);
 	Serial.print("\r\n");
 }
  
@@ -182,6 +213,22 @@ void printMotions()
 	Serial.print("\r\n");
 }
 
+void plotMotions()
+{
+	Serial.print(motion.zoom);
+	Serial.print("\t");
+	Serial.print(motion.pan.u);
+	Serial.print("\t");
+	Serial.print(motion.pan.v);
+	Serial.print("\t");
+	Serial.print(motion.orbit.u);
+	Serial.print("\t");
+	Serial.print(motion.orbit.v);
+	Serial.print("\t");
+	Serial.print(motion.roll);
+	Serial.print("\r\n");
+}
+
 /*
  * THIS IS WHERE THE MAGIC HAPPENS
  * everythig else is mostly just boilerplate for reading values
@@ -191,7 +238,7 @@ void printMotions()
  * from each stick's local UV space
  */
 
-void getMotion()
+void calcMotion()
 { // calculates the motions from the states of the joysticks
 	motion.zoom = (input.A.v + input.B.v + input.C.v)/3;
 	motion.roll = (input.A.u + input.B.u + input.C.u)/3;
@@ -220,12 +267,10 @@ void apply_zoom( int zoom)
 {
 	if(curr.zoom)
 	{
-/*
-		Keyboard.press(KEY_LEFT_SHIFT);
-		Keyboard.press(zoom>0 ? KEY_KEYPAD_PLUS : KEY_KEYPAD_MINUS);
-		Keyboard.release(zoom>0 ? KEY_KEYPAD_PLUS : KEY_KEYPAD_MINUS);
-		Keyboard.release(KEY_LEFT_SHIFT);
- */
+		bleCombo.press(KEY_LEFT_SHIFT);
+		bleCombo.press(zoom>0 ? KEY_NUM_PLUS : KEY_NUM_MINUS);
+		bleCombo.release(zoom>0 ? KEY_NUM_PLUS : KEY_NUM_MINUS);
+		bleCombo.release(KEY_LEFT_SHIFT);
 	}
 }
 
@@ -233,12 +278,10 @@ void apply_roll( int roll)
 {
 	if(curr.roll)
 	{
-/*
-		Keyboard.press(KEY_LEFT_SHIFT);
-		Keyboard.press(roll>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
-		Keyboard.release(roll>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
-		Keyboard.release(KEY_LEFT_SHIFT);
- */
+		bleCombo.press(KEY_LEFT_SHIFT);
+		bleCombo.press(roll>0 ? KEY_NUM_6 : KEY_NUM_4);
+		bleCombo.release(roll>0 ? KEY_NUM_6 : KEY_NUM_4);
+		bleCombo.release(KEY_LEFT_SHIFT);
 	}
 }
 
@@ -246,12 +289,10 @@ void apply_orbit( struct uv orbit)
 {
 	if(curr.orbit)
 	{
-/*
-		Keyboard.press(orbit.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
-		Keyboard.release(orbit.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
-		Keyboard.press(orbit.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
-		Keyboard.release(orbit.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
- */
+		bleCombo.press(orbit.u>0 ? KEY_NUM_6 : KEY_NUM_4);
+		bleCombo.release(orbit.u>0 ? KEY_NUM_6 : KEY_NUM_4);
+		bleCombo.press(orbit.v>0 ? KEY_NUM_8 : KEY_NUM_2);
+		bleCombo.release(orbit.v>0 ? KEY_NUM_8 : KEY_NUM_2);
 	}
 }
 
@@ -259,20 +300,18 @@ void apply_pan( struct uv pan)
 {
 	if(curr.pan)
 	{
-/*
-		Keyboard.press(KEY_LEFT_CTRL);
-		Keyboard.press(pan.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
-		Keyboard.release(pan.u>0 ? KEY_KEYPAD_6 : KEY_KEYPAD_4);
-		Keyboard.press(pan.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
-		Keyboard.release(pan.v>0 ? KEY_KEYPAD_8 : KEY_KEYPAD_2);
-		Keyboard.release(KEY_LEFT_CTRL);
- */
+		bleCombo.press(KEY_LEFT_CTRL);
+		bleCombo.press(pan.u>0 ? KEY_NUM_6 : KEY_NUM_4);
+		bleCombo.release(pan.u>0 ? KEY_NUM_6 : KEY_NUM_4);
+		bleCombo.press(pan.v>0 ? KEY_NUM_8 : KEY_NUM_2);
+		bleCombo.release(pan.v>0 ? KEY_NUM_8 : KEY_NUM_2);
+		bleCombo.release(KEY_LEFT_CTRL);
 	}
 }
 
 void apply_motion()
 {
-	//apply_zoom(motion.zoom);
+	apply_zoom(motion.zoom);
 	apply_roll(motion.roll);
 	apply_pan(motion.pan);
 	apply_orbit(motion.orbit);
@@ -280,32 +319,27 @@ void apply_motion()
 
 void setup()
 {
-	pinMode(13,INPUT);
-	pinMode(12,INPUT);
+	pinMode(Pinout::BUTTON, INPUT_PULLUP);
 	
 	Serial.begin(9600);
+	Serial.print("im not braindead!");
 	for (int i=0;i<FILTERING;i++)
 	{
 		updateInput();
 	}
-	roll_zero(&raw_rolling.Au);
-	roll_zero(&raw_rolling.Av);
-	roll_zero(&raw_rolling.Bu);
-	roll_zero(&raw_rolling.Bv);
-	roll_zero(&raw_rolling.Cu);
-	roll_zero(&raw_rolling.Cv);
-//	Keyboard.begin();
-//	Mouse.begin();
+	zero_all();
+	bleCombo.begin();
 }
 
 void loop()
 {
 	updateInput();
-	plotInputs();
-/*
-	getMotion();
-	printMotions();
-	apply_motion();
- */
-	delay(DELAY);
+//	plotInputs();
+	calcMotion();
+	plotMotions();
+	if(enabled)
+	{
+		apply_motion();
+	}
+	 delay(DELAY);
 }
