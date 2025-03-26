@@ -22,7 +22,7 @@
 #define ANALOG_MAX 4096 // measuring range of ADCs
 #define THRESHOLD 1024 // "deadzone" size. any input below this will be ignored
 #define FILTERING 1  // number of rolling average slots. higher values reduce noise at the cost of input lag
-#define DELAY 100 // use this to control the main loop speed
+#define DELAY 8 // use this to control the main loop speed
 #define SPEED 1/16
 
 BleCombo bleCombo("Space Mouse", "un jmeker", 42);
@@ -313,8 +313,8 @@ void apply_motion()
 {
 	apply_zoom(motion.zoom);
 	apply_roll(motion.roll);
-	apply_pan(motion.pan);
-	apply_orbit(motion.orbit);
+//	apply_pan(motion.pan);
+//	apply_orbit(motion.orbit);
 }
 
 void setup()
