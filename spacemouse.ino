@@ -16,11 +16,11 @@
 	   <60> mm
 */
 
-#define sin60 1000/866
-#define sin30 2/1
+#define sin60 866/1000
+#define sin30 1/2
 
 #define ANALOG_MAX 4096 // measuring range of ADCs
-#define THRESHOLD 1024 // "deadzone" size. any input below this will be ignored
+#define THRESHOLD 512 // "deadzone" size. any input below this will be ignored
 #define FILTERING 1  // number of rolling average slots. higher values reduce noise at the cost of input lag
 #define DELAY 8 // use this to control the main loop speed
 #define SPEED 1/16
@@ -244,13 +244,13 @@ void calcMotion()
 	motion.roll = (input.A.u + input.B.u + input.C.u)/3;
 	motion.pan = 
 	{
-		-input.A.u + (input.B.u + input.C.u)*sin30, 
-		(-input.B.u + input.C.u)*sin60
+		-input.A.u + (input.B.u + input.C.u)*sin30/3, 
+		(-input.B.u + input.C.u)*sin60/3
 	};
 	motion.orbit=
 	{
-		-(input.B.v - input.C.v)*sin60, 
-		-input.A.v + (input.B.v + input.C.v)*sin30
+		-(input.B.v - input.C.v)*sin60/3, 
+		(input.A.v - (input.B.v+input.C.v)*sin30)/3
 	};
 	curr.zoom = (abs(motion.zoom) > THRESHOLD);
 	curr.roll = (abs(motion.roll) > THRESHOLD);
@@ -313,8 +313,8 @@ void apply_motion()
 {
 	apply_zoom(motion.zoom);
 	apply_roll(motion.roll);
-//	apply_pan(motion.pan);
-//	apply_orbit(motion.orbit);
+	apply_pan(motion.pan);
+	apply_orbit(motion.orbit);
 }
 
 void setup()
