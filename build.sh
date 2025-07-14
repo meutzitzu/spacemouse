@@ -1,1 +1,3 @@
-arduino-cli compile --fqbn esp32:esp32:esp32 . && arduino-cli upload -p /dev/ttyUSB1 --fqbn esp32:esp32:esp32 .
+#!/bin/bash
+#arduino-cli compile --fqbn esp32:esp32:esp32 . && arduino-cli upload -p /dev/ttyUSB1 --fqbn esp32:esp32:esp32 .
+pio run -t upload
