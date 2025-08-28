@@ -1,1 +1,3 @@
-clino compile --fqbn arduino:sam:arduino_due_x . && clino upload -p /dev/ttyACM0 --fqbn arduino:sam:arduino_due_x .
+#!/bin/bash
+#arduino-cli compile --fqbn esp32:esp32:esp32 . && arduino-cli upload -p /dev/ttyUSB1 --fqbn esp32:esp32:esp32 .
+pio run -t upload
